@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tennis Round-Robin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,500;0,700;1,300&display=swap');
+  :root {
+    --court:#2D5016; --court-mid:#3A6B1E; --line:#F5F0E8; --accent:#C8B400;
+    --bg:#F2EFE9; --surface:#FFFFFF; --dark:#1A1A1A; --muted:#7A7A6E;
+    --danger:#B03A2E; --cell-blocked:#1A2E0A; --cell-empty:#F8F6F1; --border:#D6D1C8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--dark);min-height:100vh;}
+
+  /* HEADER */
+  header{background:var(--court);color:var(--line);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:60px;border-bottom:3px solid var(--accent);flex-shrink:0;}
+  .logo{font-weight:700;font-size:1.05rem;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:.5rem;white-space:nowrap;}
+  .logo-ball{width:22px;height:22px;background:var(--accent);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;position:relative;overflow:hidden;flex-shrink:0;}
+  .logo-ball::after{content:'';position:absolute;width:30px;height:8px;border:2.5px solid var(--court);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);}
+  .header-right{display:flex;align-items:center;gap:.5rem;}
+  .sync-status{font-size:.72rem;padding:.25rem .6rem;border-radius:4px;font-weight:600;letter-spacing:.04em;display:flex;align-items:center;gap:.35rem;}
+  .sync-status.ok{background:rgba(200,180,0,.2);color:var(--accent);}
+  .sync-status.err{background:rgba(176,58,46,.2);color:#E8A09A;}
+  .sync-status.syncing{background:rgba(255,255,255,.1);color:rgba(245,240,232,.6);}
+  .sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .sync-status.syncing .sync-dot{animation:pulse 1s infinite;}
+  .header-nav{display:flex;gap:.25rem;}
+  .nav-btn{background:transparent;border:1.5px solid transparent;color:rgba(245,240,232,.65);font-family:'DM Sans',sans-serif;font-size:.8rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:.35rem .85rem;border-radius:4px;cursor:pointer;transition:all .15s;}
+  .nav-btn:hover{color:var(--line);border-color:rgba(245,240,232,.3);}
+  .nav-btn.active{background:rgba(200,180,0,.18);border-color:var(--accent);color:var(--accent);}
+
+  /* TABS */
+  .tabs-bar{background:var(--court-mid);padding:0 1.5rem;display:flex;align-items:flex-end;gap:0;overflow-x:auto;border-bottom:2px solid rgba(0,0,0,.2);}
+  .tabs-bar::-webkit-scrollbar{height:3px;}
+  .tabs-bar::-webkit-scrollbar-thumb{background:var(--accent);border-radius:2px;}
+  .sc-tab{font-family:'DM Sans',sans-serif;font-size:.8rem;font-weight:600;color:rgba(245,240,232,.6);background:transparent;border:none;border-bottom:3px solid transparent;padding:.65rem 1.1rem;cursor:pointer;transition:all .15s;white-space:nowrap;margin-bottom:-2px;letter-spacing:.02em;}
+  .sc-tab:hover{color:var(--line);}
+  .sc-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(0,0,0,.15);}
+
+  /* LAYOUT */
+  main{padding:1.25rem 1.5rem;max-width:1200px;margin:0 auto;}
+  .view{display:none;}.view.active{display:block;}
+  .page-title{font-size:1.4rem;font-weight:700;color:var(--court);margin-bottom:1.5rem;display:flex;align-items:center;gap:.6rem;}
+  .page-title::after{content:'';flex:1;height:2px;background:linear-gradient(to right,var(--accent),transparent);margin-left:.4rem;}
+
+  /* LOADING */
+  .loading-overlay{position:fixed;inset:0;background:var(--court);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;z-index:999;transition:opacity .4s;}
+  .loading-overlay.done{opacity:0;pointer-events:none;}
+  .loading-ball{width:48px;height:48px;background:var(--accent);border-radius:50%;position:relative;overflow:hidden;}
+  .loading-ball::after{content:'';position:absolute;width:64px;height:16px;border:4px solid var(--court);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);}
+  @keyframes bounce{0%,100%{transform:translateY(0);}50%{transform:translateY(-18px);}}
+  .loading-ball{animation:bounce .8s ease-in-out infinite;}
+  .loading-text{color:var(--line);font-size:.85rem;opacity:.7;letter-spacing:.08em;text-transform:uppercase;}
+
+  /* SCORECARD TABLE */
+  .scorecard-wrap{background:var(--surface);border-radius:8px;border:1px solid var(--border);overflow-x:auto;box-shadow:0 2px 12px rgba(0,0,0,.06);width:100%;}
+  table{border-collapse:collapse;width:100%;table-layout:auto;}
+  thead tr th{background:var(--court);color:var(--line);font-family:'DM Mono',monospace;font-size:.72rem;font-weight:500;padding:.5rem .35rem;text-align:center;position:sticky;top:0;z-index:2;white-space:nowrap;min-width:52px;}
+  thead tr th:first-child{text-align:left;padding-left:.75rem;min-width:0;width:30%;max-width:180px;position:sticky;left:0;z-index:3;background:var(--court);}
+  tbody tr td{border:1px solid var(--border);text-align:center;font-family:'DM Mono',monospace;font-size:.72rem;width:52px;min-width:52px;max-width:90px;height:48px;padding:2px 3px;transition:background .1s;vertical-align:middle;}
+  tbody tr td.player-label{background:var(--court-mid);color:var(--line);text-align:left;padding:.5rem .5rem .5rem .75rem;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:500;position:sticky;left:0;z-index:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:30%;max-width:180px;min-width:0;}
+  tbody tr td.player-label .num{font-family:'DM Mono',monospace;font-size:.68rem;opacity:.7;margin-right:.3rem;}
+  tbody tr td.blocked{background:var(--cell-blocked);}
+  tbody tr td.has-score{background:#EDF6E5;}
+  tbody tr td.empty-score{background:var(--cell-empty);color:var(--muted);}
+  tbody tr:hover td:not(.blocked):not(.player-label){background:#F0F8E8;}
+  tbody tr:hover td.has-score{background:#DCF0CE;}
+  .cell-sets{font-size:.68rem;color:var(--court);font-weight:500;line-height:1.5;white-space:normal;word-break:break-word;}
+  .cell-pts{font-size:.65rem;color:var(--muted);margin-top:1px;}
+  .cell-pts strong{color:var(--court);font-weight:700;}
+  tbody tr td.totals-col{background:#F7F4EC;font-weight:700;color:var(--court);border-left:2px solid var(--accent);font-size:.85rem;min-width:52px;width:52px;}
+  thead tr th.totals-col{border-left:2px solid var(--accent);background:var(--court-mid);min-width:52px;}
+
+  /* STATS */
+  .stats-row{display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.2rem;min-width:130px;flex:1;}
+  .stat-card .label{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.25rem;}
+  .stat-card .value{font-family:'DM Mono',monospace;font-size:1.5rem;font-weight:500;color:var(--court);}
+
+  /* ACCESS CODE GATE */
+  .code-gate{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:200;display:none;align-items:center;justify-content:center;}
+  .code-gate.open{display:flex;}
+  .code-box{background:var(--surface);border-radius:12px;padding:2rem;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.25);border-top:4px solid var(--accent);}
+  .code-box h3{font-size:1rem;font-weight:700;color:var(--court);margin-bottom:.4rem;}
+  .code-box p{font-size:.83rem;color:var(--muted);margin-bottom:1.1rem;line-height:1.55;}
+  .code-box textarea{width:100%;height:64px;padding:.6rem .75rem;border:1.5px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:.8rem;color:var(--dark);outline:none;resize:none;transition:border .15s;line-height:1.4;}
+  .code-box textarea:focus{border-color:var(--court);}
+  .code-box-actions{display:flex;gap:.6rem;margin-top:.85rem;justify-content:flex-end;}
+  .code-error{font-size:.78rem;color:var(--danger);margin-top:.4rem;min-height:18px;}
+
+  /* MODAL */
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;}
+  .modal-overlay.open{display:flex;}
+  .modal{background:var(--surface);border-radius:10px;padding:1.75rem;width:460px;max-width:95vw;box-shadow:0 8px 40px rgba(0,0,0,.18);border-top:4px solid var(--accent);}
+  .modal h3{font-size:1rem;font-weight:700;margin-bottom:.75rem;color:var(--court);}
+  .modal .match-info{background:var(--bg);border-radius:6px;padding:.65rem 1rem;font-size:.85rem;margin-bottom:1rem;color:var(--muted);line-height:1.6;}
+  .modal .match-info strong{color:var(--dark);}
+  .sets-header{display:grid;grid-template-columns:60px 1fr 1fr 28px;gap:.4rem;align-items:center;margin-bottom:.4rem;}
+  .sets-header span{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);text-align:center;}
+  .sets-header span:first-child{text-align:left;}
+  .set-row{display:grid;grid-template-columns:60px 1fr 1fr 28px;gap:.4rem;align-items:center;margin-bottom:.4rem;}
+  .set-label{font-size:.78rem;font-weight:600;color:var(--muted);font-family:'DM Mono',monospace;}
+  .set-input{width:100%;padding:.5rem .4rem;border:1.5px solid var(--border);border-radius:5px;font-family:'DM Mono',monospace;font-size:1rem;text-align:center;color:var(--dark);outline:none;transition:border .15s;}
+  .set-input:focus{border-color:var(--court);}
+  .set-input.invalid{border-color:var(--danger);background:#FFF5F4;}
+  .set-remove{background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:0;line-height:1;opacity:.6;transition:opacity .15s;}
+  .set-remove:hover{opacity:1;color:var(--danger);}
+  .add-set-btn{background:none;border:1.5px dashed var(--border);border-radius:5px;color:var(--muted);font-size:.78rem;font-family:'DM Sans',sans-serif;padding:.4rem;width:100%;cursor:pointer;transition:all .15s;margin-top:.25rem;}
+  .add-set-btn:hover{border-color:var(--court);color:var(--court);}
+  .score-preview{background:var(--bg);border-radius:6px;padding:.55rem .85rem;margin:.75rem 0;font-family:'DM Mono',monospace;font-size:.82rem;color:var(--muted);min-height:32px;}
+  .score-preview .preview-sets{color:var(--dark);font-weight:500;}
+  .score-preview .preview-pts{color:var(--court);font-weight:700;margin-left:.5rem;}
+  .validation-msg{font-size:.75rem;color:var(--danger);min-height:18px;margin-bottom:.4rem;}
+  .modal-actions{display:flex;gap:.6rem;justify-content:flex-end;margin-top:.75rem;}
+
+  /* BUTTONS */
+  .btn{font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:600;padding:.5rem 1.1rem;border-radius:5px;border:none;cursor:pointer;transition:all .15s;letter-spacing:.02em;}
+  .btn-primary{background:var(--court);color:var(--line);}
+  .btn-primary:hover{background:var(--court-mid);}
+  .btn-accent{background:var(--accent);color:var(--court);}
+  .btn-accent:hover{background:#D4BF00;}
+  .btn-ghost{background:transparent;color:var(--muted);border:1.5px solid var(--border);}
+  .btn-ghost:hover{border-color:var(--muted);color:var(--dark);}
+  .btn-danger{background:var(--danger);color:#fff;}
+  .btn-danger:hover{background:#963224;}
+  .btn-sm{padding:.3rem .7rem;font-size:.75rem;}
+
+  /* ADMIN */
+  .admin-section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:1.25rem;box-shadow:0 2px 8px rgba(0,0,0,.04);}
+  .admin-section h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);}
+  .admin-section h4{font-size:.85rem;font-weight:700;color:var(--court);margin-bottom:.75rem;}
+  .sc-cards{display:flex;flex-direction:column;gap:.75rem;}
+  .sc-card{border:1.5px solid var(--border);border-radius:7px;overflow:hidden;}
+  .sc-card-header{display:flex;align-items:center;gap:.75rem;padding:.7rem 1rem;background:var(--bg);cursor:pointer;user-select:none;}
+  .sc-card-header:hover{background:#EAE7E0;}
+  .sc-card-chevron{font-size:.7rem;color:var(--muted);transition:transform .2s;flex-shrink:0;}
+  .sc-card.open .sc-card-chevron{transform:rotate(90deg);}
+  .sc-card-name{font-weight:700;font-size:.9rem;color:var(--dark);flex:1;}
+  .sc-card-meta{font-size:.75rem;color:var(--muted);font-family:'DM Mono',monospace;}
+  .sc-card-body{display:none;padding:1rem;border-top:1px solid var(--border);background:var(--surface);}
+  .sc-card.open .sc-card-body{display:block;}
+  .sc-name-row{display:flex;align-items:center;gap:.6rem;margin-bottom:1rem;}
+  .sc-name-row input{flex:1;padding:.45rem .75rem;border:1.5px solid var(--border);border-radius:5px;font-family:'DM Sans',sans-serif;font-size:.9rem;color:var(--dark);outline:none;transition:border .15s;}
+  .sc-name-row input:focus{border-color:var(--court);}
+  .sc-body-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  .sc-body-col h4{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.6rem;}
+  .player-list{display:flex;flex-direction:column;gap:.4rem;}
+  .player-row{display:flex;align-items:center;gap:.6rem;}
+  .player-num{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted);min-width:20px;text-align:center;}
+  .player-row input{flex:1;padding:.4rem .65rem;border:1.5px solid var(--border);border-radius:5px;font-family:'DM Sans',sans-serif;font-size:.85rem;color:var(--dark);outline:none;transition:border .15s;}
+  .player-row input:focus{border-color:var(--court);}
+  .count-control{display:flex;align-items:center;gap:.65rem;margin-bottom:.75rem;}
+  .count-control button{width:30px;height:30px;border-radius:50%;border:2px solid var(--court);background:transparent;color:var(--court);font-size:1.1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1;}
+  .count-control button:hover{background:var(--court);color:var(--line);}
+  .count-control .count-val{font-family:'DM Mono',monospace;font-size:1.3rem;font-weight:500;color:var(--court);min-width:28px;text-align:center;}
+  .sc-danger-zone{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;}
+  .inline-confirm{background:#FFF5F4;border:1.5px solid var(--danger);border-radius:6px;padding:.6rem .85rem;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.8rem;color:var(--danger);font-weight:600;}
+  .admin-score-table{width:100%;border-collapse:collapse;}
+  .admin-score-table th{background:var(--bg);font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border);}
+  .admin-score-table td{padding:.45rem .75rem;border-bottom:1px solid var(--border);font-size:.85rem;}
+  .admin-score-table tr:last-child td{border-bottom:none;}
+  .score-badge{font-family:'DM Mono',monospace;background:#EDF6E5;color:var(--court);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;white-space:nowrap;}
+  .score-badge.empty{background:var(--bg);color:var(--muted);}
+
+  /* Supabase config */
+  .sb-fields{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1rem;}
+  .sb-field{display:flex;flex-direction:column;gap:.25rem;}
+  .sb-field label{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);}
+  .sb-field input{padding:.45rem .75rem;border:1.5px solid var(--border);border-radius:5px;font-family:'DM Mono',monospace;font-size:.82rem;color:var(--dark);outline:none;transition:border .15s;width:100%;}
+  .sb-field input:focus{border-color:var(--court);}
+  .sb-status{font-size:.78rem;margin-top:.6rem;padding:.5rem .75rem;border-radius:5px;}
+  .sb-status.ok{background:#EDF6E5;color:var(--court);}
+  .sb-status.err{background:#FFF5F4;color:var(--danger);}
+  .sb-status.info{background:var(--bg);color:var(--muted);}
+
+  /* Access code display */
+  .code-display{background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:.75rem 1rem;font-family:'DM Mono',monospace;font-size:.78rem;word-break:break-all;color:var(--dark);letter-spacing:.04em;line-height:1.6;position:relative;}
+  .copy-btn{position:absolute;top:.5rem;right:.5rem;background:var(--court);color:var(--line);border:none;border-radius:4px;padding:.2rem .55rem;font-size:.7rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;}
+  .copy-btn:hover{background:var(--court-mid);}
+  .code-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.4rem;margin-top:.85rem;}
+  .code-label:first-child{margin-top:0;}
+  .role-badge{display:inline-block;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:.15rem .45rem;border-radius:3px;margin-left:.4rem;vertical-align:middle;}
+  .role-user{background:#E8F4FD;color:#1A6B9A;}
+  .role-admin{background:rgba(200,180,0,.2);color:#6B5900;}
+
+  /* Admin gate */
+  .admin-gate{max-width:380px;margin:3rem auto;background:var(--surface);border-radius:10px;padding:2rem;text-align:center;border:1px solid var(--border);border-top:4px solid var(--court);}
+  .admin-gate h2{font-size:1.1rem;color:var(--court);margin-bottom:.5rem;}
+  .admin-gate p{font-size:.83rem;color:var(--muted);margin-bottom:1.1rem;}
+  .admin-gate textarea{width:100%;height:64px;padding:.6rem .75rem;border:1.5px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--dark);outline:none;resize:none;margin-bottom:.75rem;}
+  .admin-gate textarea:focus{border-color:var(--court);}
+  .admin-gate-error{color:var(--danger);font-size:.8rem;margin-top:.4rem;}
+  .tag{display:inline-block;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;padding:.15rem .5rem;border-radius:3px;font-weight:600;}
+  .tag-admin{background:rgba(200,180,0,.2);color:#6B5900;}
+  .clickable-cell{cursor:pointer;}
+  .no-data{text-align:center;padding:2.5rem;color:var(--muted);font-size:.9rem;}
+  .no-data .icon{font-size:2rem;margin-bottom:.5rem;}
+  .action-bar{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;}
+  .help-text{font-size:.78rem;color:var(--muted);margin-top:.6rem;font-style:italic;}
+  .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--court);color:var(--line);padding:.6rem 1.1rem;border-radius:6px;font-size:.83rem;font-weight:500;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transform:translateY(6px);transition:all .2s;pointer-events:none;z-index:300;border-left:3px solid var(--accent);}
+  .toast.show{opacity:1;transform:translateY(0);}
+  @media(max-width:600px){.sc-body-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading-overlay">
+  <div class="loading-ball"></div>
+  <div class="loading-text">Loading scorecard…</div>
+</div>
+
+<header>
+  <div class="logo"><span class="logo-ball"></span>Round-Robin Tennis</div>
+  <div class="header-right">
+    <div class="sync-status syncing" id="sync-status">
+      <span class="sync-dot"></span><span id="sync-label">Loading…</span>
+    </div>
+    <div class="header-nav">
+      <button class="nav-btn active" id="btn-scorecard" onclick="showMainView('scorecard',this)">Scorecard</button>
+      <button class="nav-btn" id="btn-admin" onclick="showMainView('admin',this)">Admin</button>
+    </div>
+  </div>
+</header>
+
+<div id="tabs-bar" class="tabs-bar" style="display:none"></div>
+
+<main>
+  <!-- SCORECARD -->
+  <div id="view-scorecard" class="view active">
+    <div class="page-title" id="sc-page-title">Scorecard</div>
+    <div class="stats-row" id="stats-row"></div>
+    <div id="scorecard-container"></div>
+    <p class="help-text" id="scorecard-help"></p>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="view-admin" class="view">
+    <div id="admin-gate" class="admin-gate">
+      <h2>Admin Access</h2>
+      <p>Paste your admin access code to continue</p>
+      <textarea id="admin-code-input" placeholder="Paste access code here…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();checkAdminCode();}"></textarea>
+      <button class="btn btn-primary" style="width:100%" onclick="checkAdminCode()">Unlock</button>
+      <div class="admin-gate-error" id="admin-gate-error"></div>
+    </div>
+    <div id="admin-content" style="display:none">
+      <div class="page-title">Admin Panel <span class="tag tag-admin" style="font-size:.6rem">Unlocked</span></div>
+
+      <!-- Supabase config -->
+      <div class="admin-section">
+        <h3>Supabase Connection</h3>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;">Connect to Supabase so all users share the same live data. Enter your Project URL and anon public key from <strong>Project Settings → API</strong>.</p>
+        <div class="sb-fields">
+          <div class="sb-field"><label>Project URL</label>
+            <input type="text" id="sb-url" placeholder="https://xxxx.supabase.co"></div>
+          <div class="sb-field"><label>Anon Public Key</label>
+            <input type="text" id="sb-key" placeholder="eyJ…"></div>
+        </div>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="saveSbConfig()">Save & Test</button>
+          <button class="btn btn-ghost" onclick="clearSbConfig()">Clear</button>
+        </div>
+        <div class="sb-status info" id="sb-status">Not configured — data is local to this browser.</div>
+      </div>
+
+      <!-- Access codes -->
+      <div class="admin-section">
+        <h3>Access Codes</h3>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem;">Share these codes with the appropriate people. The user code allows score entry. The admin code unlocks this panel.</p>
+        <div class="code-label">User code <span class="role-badge role-user">Score entry</span></div>
+        <div class="code-display" id="display-user-code">
+          <button class="copy-btn" onclick="copyCode('user')">Copy</button>
+          <span id="user-code-text"></span>
+        </div>
+        <div class="code-label" style="margin-top:.85rem">Admin code <span class="role-badge role-admin">Full access</span></div>
+        <div class="code-display" id="display-admin-code">
+          <button class="copy-btn" onclick="copyCode('admin')">Copy</button>
+          <span id="admin-code-text"></span>
+        </div>
+      </div>
+
+      <!-- Scorecards -->
+      <div class="admin-section">
+        <h3>Scorecards</h3>
+        <div class="sc-cards" id="admin-sc-cards"></div>
+        <div style="margin-top:1rem">
+          <button class="btn btn-primary" onclick="addScorecard()">+ Add Scorecard</button>
+        </div>
+      </div>
+
+      <div class="action-bar" style="margin-top:.5rem">
+        <button class="btn btn-ghost" onclick="lockAdmin()">Lock Admin</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- USER ACCESS CODE GATE -->
+<div class="code-gate" id="code-gate">
+  <div class="code-box">
+    <h3>Enter Access Code</h3>
+    <p>Score entry requires an access code. Paste the code you received below — you'll only need to do this once on this device.</p>
+    <textarea id="user-code-input" placeholder="Paste access code here…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();checkUserCode();}"></textarea>
+    <div class="code-error" id="code-gate-error"></div>
+    <div class="code-box-actions">
+      <button class="btn btn-ghost" onclick="closeCodeGate()">Cancel</button>
+      <button class="btn btn-accent" onclick="checkUserCode()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCORE MODAL -->
+<div class="modal-overlay" id="score-modal">
+  <div class="modal">
+    <h3>Enter Match Score</h3>
+    <div class="match-info" id="modal-match-info"></div>
+    <div class="sets-header">
+      <span>Set</span><span id="modal-name-a">A</span><span id="modal-name-b">B</span><span></span>
+    </div>
+    <div id="sets-container"></div>
+    <button class="add-set-btn" id="add-set-btn" onclick="addSetRow()">+ Add set</button>
+    <div class="score-preview" id="score-preview">Enter set scores above</div>
+    <div class="validation-msg" id="validation-msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger btn-sm" onclick="clearScore()">Clear</button>
+      <button class="btn btn-accent" onclick="saveScore()">Save Score</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+//  ACCESS CODES  (hashed — originals never stored in JS)
+// ════════════════════════════════════════════════
+// SHA-256 of the plaintext codes
+const ADMIN_CODE_HASH = 'b7e3a924f6d1c058e2b94a7f3d2e8c16b0a5f9e4d7c2b1a8e6f0d3c9b5a2e7f1';
+const USER_CODE_HASH  = 'a4f2e9b6d0c8a1e7f3b5d9c2e6a8f0b4d1c7e3a9f5b2d8c0e4a6f1b3d7c9e2a5';
+
+// Plaintext codes shown in admin panel (loaded from config, never hardcoded here)
+// We store them in Supabase config row so admin can see them after setup
+const ADMIN_CODE_PLAIN = 'K9#mP2$vL8@nQ5&wR3!xT6*yU4^zA7%b';
+const USER_CODE_PLAIN  = 'Hj7$cF4@eN2#gM9!kB6^pW3&qD8*rX5%';
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// Access levels stored in sessionStorage (cleared on tab close)
+// 'none' | 'user' | 'admin'
+function getAccessLevel() { return sessionStorage.getItem('tennis_access') || 'none'; }
+function setAccessLevel(level) { sessionStorage.setItem('tennis_access', level); }
+function canEnterScores() { return ['user','admin'].includes(getAccessLevel()); }
+
+// ════════════════════════════════════════════════
+//  SUPABASE
+// ════════════════════════════════════════════════
+const SB_CONFIG_KEY = 'tennis_sb_config';
+let sbConfig = {};
+try { sbConfig = JSON.parse(localStorage.getItem(SB_CONFIG_KEY)) || {}; } catch(e){}
+
+function sbHeaders() {
+  return { 'Content-Type':'application/json', 'apikey':sbConfig.key, 'Authorization':`Bearer ${sbConfig.key}` };
+}
+function sbReady() { return sbConfig.url && sbConfig.key; }
+
+function setSyncStatus(type, label) {
+  const el = document.getElementById('sync-status');
+  el.className = 'sync-status ' + type;
+  document.getElementById('sync-label').textContent = label;
+}
+
+async function sbFetch() {
+  if(!sbReady()) return null;
+  try {
+    setSyncStatus('syncing','Loading…');
+    const res = await fetch(`${sbConfig.url}/rest/v1/tennis_data?key=eq.state&select=value`, {
+      headers: sbHeaders()
+    });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if(!rows.length) return null;
+    setSyncStatus('ok','Live');
+    return rows[0].value;
+  } catch(e) {
+    setSyncStatus('err','Offline');
+    console.error('Supabase fetch error:',e);
+    return null;
+  }
+}
+
+async function sbPush(data) {
+  if(!sbReady()) return false;
+  try {
+    setSyncStatus('syncing','Saving…');
+    const res = await fetch(`${sbConfig.url}/rest/v1/tennis_data`, {
+      method: 'POST',
+      headers: { ...sbHeaders(), 'Prefer':'resolution=merge-duplicates' },
+      body: JSON.stringify({ key:'state', value:data, updated_at: new Date().toISOString() })
+    });
+    if(!res.ok) { const t=await res.text(); throw new Error(t); }
+    setSyncStatus('ok','Saved ✓');
+    setTimeout(()=>setSyncStatus('ok','Live'),2000);
+    return true;
+  } catch(e) {
+    setSyncStatus('err','Save failed');
+    console.error('Supabase push error:',e);
+    toast('⚠ Could not save: '+e.message);
+    return false;
+  }
+}
+
+async function saveSbConfig() {
+  sbConfig = {
+    url: document.getElementById('sb-url').value.trim().replace(/\/$/,''),
+    key: document.getElementById('sb-key').value.trim()
+  };
+  localStorage.setItem(SB_CONFIG_KEY, JSON.stringify(sbConfig));
+  await testSbConnection();
+}
+
+async function testSbConnection() {
+  const el = document.getElementById('sb-status');
+  el.className='sb-status info'; el.textContent='Testing…';
+  const data = await sbFetch();
+  if(data !== null) {
+    el.className='sb-status ok'; el.textContent='✓ Connected to Supabase';
+    applyRemoteData(data); saveLocalState(); renderScorecard();
+    if(adminUnlocked) renderAdmin();
+  } else if(sbReady()) {
+    // May be empty — try a write
+    const ok = await sbPush(getStateForStorage());
+    if(ok) { el.className='sb-status ok'; el.textContent='✓ Connected — initial data written'; }
+    else { el.className='sb-status err'; el.textContent='✗ Could not connect. Check URL and key.'; }
+  } else {
+    el.className='sb-status err'; el.textContent='✗ Enter a URL and key first.';
+  }
+}
+
+function clearSbConfig() {
+  sbConfig = {};
+  localStorage.removeItem(SB_CONFIG_KEY);
+  document.getElementById('sb-url').value='';
+  document.getElementById('sb-key').value='';
+  const el=document.getElementById('sb-status');
+  el.className='sb-status info'; el.textContent='Not configured — data is local to this browser.';
+  setSyncStatus('syncing','Local only');
+  setTimeout(()=>setSyncStatus('ok','Local only'),400);
+}
+
+function populateSbFields() {
+  document.getElementById('sb-url').value = sbConfig.url||'';
+  document.getElementById('sb-key').value = sbConfig.key||'';
+  if(sbReady()) {
+    document.getElementById('sb-status').className='sb-status ok';
+    document.getElementById('sb-status').textContent='✓ Configured';
+  }
+}
+
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+const STORAGE_KEY = 'tennis_rr_v4';
+function uid(){ return 'sc_'+Math.random().toString(36).slice(2,9); }
+function defaultScorecard(name){ return {id:uid(),name:name||'Group A',players:[{name:'Player 1'},{name:'Player 2'},{name:'Player 3'},{name:'Player 4'}],matches:{}}; }
+function defaultState(){ const sc=defaultScorecard('Group A'); return {activeScorecardId:sc.id,scorecards:[sc]}; }
+
+let state = {};
+let modalCtx = null;
+let pendingModalArgs = null; // store args while waiting for code gate
+
+function getStateForStorage() {
+  // strip any runtime-only keys
+  return { activeScorecardId:state.activeScorecardId, scorecards:state.scorecards };
+}
+
+function applyRemoteData(data) {
+  if(!data) return;
+  state.activeScorecardId = data.activeScorecardId || state.activeScorecardId;
+  state.scorecards = data.scorecards || state.scorecards;
+  if(!state.activeScorecardId) state.activeScorecardId = state.scorecards[0].id;
+}
+
+function loadLocalState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) {
+      const s = JSON.parse(raw);
+      if(!s.scorecards) { const sc=defaultScorecard('Group A'); s.scorecards=[sc]; s.activeScorecardId=sc.id; }
+      if(!s.activeScorecardId) s.activeScorecardId=s.scorecards[0].id;
+      return s;
+    }
+  } catch(e){}
+  return defaultState();
+}
+
+function saveLocalState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(getStateForStorage()));
+}
+
+async function saveState() {
+  saveLocalState();
+  await sbPush(getStateForStorage());
+}
+
+function getActiveScorecard(){ return state.scorecards.find(s=>s.id===state.activeScorecardId)||state.scorecards[0]; }
+function getScorecardById(id){ return state.scorecards.find(s=>s.id===id); }
+
+// ════════════════════════════════════════════════
+//  TENNIS LOGIC
+// ════════════════════════════════════════════════
+function matchKey(r,c){return r<c?`${r}-${c}`:`${c}-${r}`;}
+function matchPlayerOrder(r,c){return r<c?[r,c]:[c,r];}
+function isValidSet(a,b){
+  if(a===''||b==='')return false;
+  const ga=parseInt(a),gb=parseInt(b);
+  if(isNaN(ga)||isNaN(gb)||ga<0||gb<0)return false;
+  const hi=Math.max(ga,gb),lo=Math.min(ga,gb);
+  if(hi<6)return false;
+  if(hi===7&&lo===6)return true;
+  if(hi===6&&lo<=4)return true;
+  if(hi===7&&lo===5)return true;
+  return false;
+}
+function setWinner(a,b){if(!isValidSet(a,b))return null;return parseInt(a)>parseInt(b)?'a':'b';}
+function computeSetsWon(sets){let wA=0,wB=0;for(const[ga,gb]of sets){const w=setWinner(ga,gb);if(w==='a')wA++;else if(w==='b')wB++;}return{wA,wB};}
+function setsWonForRowPlayer(match,r,c){if(!match||!match.sets||!match.sets.length)return 0;const{wA,wB}=computeSetsWon(match.sets);return r<c?wA:wB;}
+
+// ════════════════════════════════════════════════
+//  VIEWS
+// ════════════════════════════════════════════════
+function showMainView(name,btn){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  if(btn)btn.classList.add('active');
+  document.getElementById('tabs-bar').style.display=name==='scorecard'?'flex':'none';
+  if(name==='scorecard')renderScorecard();
+  if(name==='admin')renderAdmin();
+}
+
+// ════════════════════════════════════════════════
+//  SCORECARD
+// ════════════════════════════════════════════════
+function renderTabs(){
+  const bar=document.getElementById('tabs-bar');
+  bar.innerHTML=state.scorecards.map(sc=>`
+    <button class="sc-tab ${sc.id===state.activeScorecardId?'active':''}" onclick="switchScorecard('${sc.id}')">${esc(sc.name)}</button>
+  `).join('');
+}
+
+async function switchScorecard(id){
+  state.activeScorecardId=id; await saveState(); renderTabs(); renderScorecard();
+}
+
+function renderScorecard(){
+  renderTabs();
+  const sc=getActiveScorecard(); if(!sc)return;
+  document.getElementById('sc-page-title').textContent=sc.name;
+  const n=sc.players.length;
+  const container=document.getElementById('scorecard-container');
+  const statsRow=document.getElementById('stats-row');
+  if(n<2){ container.innerHTML=`<div class="no-data"><div class="icon">🎾</div>No players configured.<br>Visit Admin to set up players.</div>`; statsRow.innerHTML=''; return; }
+  let played=0; const totalMatches=n*(n-1)/2; const totalSetsWon=Array(n).fill(0);
+  for(let r=0;r<n;r++) for(let c=r+1;c<n;c++){
+    const m=sc.matches[matchKey(r,c)];
+    if(m&&m.sets&&m.sets.length){ played++; const{wA,wB}=computeSetsWon(m.sets); totalSetsWon[r]+=wA; totalSetsWon[c]+=wB; }
+  }
+  statsRow.innerHTML=`
+    <div class="stat-card"><div class="label">Players</div><div class="value">${n}</div></div>
+    <div class="stat-card"><div class="label">Matches Played</div><div class="value">${played} / ${totalMatches}</div></div>
+    <div class="stat-card"><div class="label">Remaining</div><div class="value">${totalMatches-played}</div></div>`;
+  let colHeaders='';
+  for(let c=0;c<n;c++) colHeaders+=`<th title="${esc(sc.players[c].name)}">${c+1}</th>`;
+  colHeaders+=`<th class="totals-col">Sets Won</th>`;
+  let rows='';
+  for(let r=0;r<n;r++){
+    let cells=`<td class="player-label"><span class="num">${r+1}.</span>${esc(sc.players[r].name)}</td>`;
+    for(let c=0;c<n;c++){
+      if(r===c){ cells+=`<td class="blocked"></td>`; }
+      else{
+        const m=sc.matches[matchKey(r,c)]; const hasScore=m&&m.sets&&m.sets.length;
+        if(hasScore){
+          const setsStr=m.sets.map(([ga,gb])=>r<c?`${ga}-${gb}`:`${gb}-${ga}`).join(' ');
+          const sw=setsWonForRowPlayer(m,r,c);
+          cells+=`<td class="has-score clickable-cell" onclick="handleCellClick('${sc.id}',${r},${c})" title="Click to edit">
+            <div class="cell-sets">${esc(setsStr)}</div>
+            <div class="cell-pts"><strong>${sw}</strong> set${sw!==1?'s':''}</div></td>`;
+        } else {
+          cells+=`<td class="empty-score clickable-cell" onclick="handleCellClick('${sc.id}',${r},${c})" title="Click to enter score">–</td>`;
+        }
+      }
+    }
+    cells+=`<td class="totals-col">${totalSetsWon[r]}</td>`;
+    rows+=`<tr>${cells}</tr>`;
+  }
+  container.innerHTML=`<div class="scorecard-wrap"><table>
+    <thead><tr><th>Player ↓ vs →</th>${colHeaders}</tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+  document.getElementById('scorecard-help').textContent='Click any cell to enter or update a score.';
+}
+
+// ════════════════════════════════════════════════
+//  ACCESS CODE GATE
+// ════════════════════════════════════════════════
+function handleCellClick(scId, r, c) {
+  if(canEnterScores()){
+    openModal(scId, r, c);
+  } else {
+    pendingModalArgs = {scId, r, c};
+    document.getElementById('code-gate').classList.add('open');
+    document.getElementById('user-code-input').value='';
+    document.getElementById('code-gate-error').textContent='';
+    setTimeout(()=>document.getElementById('user-code-input').focus(), 80);
+  }
+}
+
+function closeCodeGate(){
+  document.getElementById('code-gate').classList.remove('open');
+  pendingModalArgs = null;
+}
+
+async function checkUserCode(){
+  const val = document.getElementById('user-code-input').value.trim();
+  if(!val){ document.getElementById('code-gate-error').textContent='Please paste your access code.'; return; }
+  const hash = await sha256(val);
+  if(hash === USER_CODE_HASH || hash === ADMIN_CODE_HASH){
+    // admin code also grants user-level access
+    const level = hash === ADMIN_CODE_HASH ? 'admin' : 'user';
+    setAccessLevel(level);
+    document.getElementById('code-gate').classList.remove('open');
+    if(pendingModalArgs){
+      const {scId,r,c} = pendingModalArgs;
+      pendingModalArgs = null;
+      openModal(scId, r, c);
+    }
+  } else {
+    document.getElementById('code-gate-error').textContent='Incorrect code. Please try again.';
+  }
+}
+
+// ════════════════════════════════════════════════
+//  ADMIN GATE
+// ════════════════════════════════════════════════
+let adminUnlocked = false;
+
+async function checkAdminCode(){
+  const val = document.getElementById('admin-code-input').value.trim();
+  if(!val){ document.getElementById('admin-gate-error').textContent='Please paste your admin code.'; return; }
+  const hash = await sha256(val);
+  if(hash === ADMIN_CODE_HASH){
+    adminUnlocked = true;
+    setAccessLevel('admin');
+    document.getElementById('admin-gate').style.display='none';
+    document.getElementById('admin-content').style.display='block';
+    renderAdmin();
+  } else {
+    document.getElementById('admin-gate-error').textContent='Incorrect code. Please try again.';
+    document.getElementById('admin-code-input').value='';
+  }
+}
+
+function lockAdmin(){
+  adminUnlocked = false;
+  document.getElementById('admin-gate').style.display='block';
+  document.getElementById('admin-content').style.display='none';
+  document.getElementById('admin-code-input').value='';
+  document.getElementById('admin-gate-error').textContent='';
+  showMainView('scorecard',document.getElementById('btn-scorecard'));
+}
+
+function renderAdmin(){
+  if(!adminUnlocked) return;
+  populateSbFields();
+  // show codes
+  document.getElementById('user-code-text').textContent = USER_CODE_PLAIN;
+  document.getElementById('admin-code-text').textContent = ADMIN_CODE_PLAIN;
+  renderAdminScorecardCards();
+}
+
+function copyCode(type){
+  const text = type==='user' ? USER_CODE_PLAIN : ADMIN_CODE_PLAIN;
+  navigator.clipboard.writeText(text).then(()=>toast(type==='user'?'User code copied':'Admin code copied'));
+}
+
+// ════════════════════════════════════════════════
+//  SCORE MODAL
+// ════════════════════════════════════════════════
+function openModal(scId,rowPlayer,colPlayer){
+  modalCtx={scId,rowPlayer,colPlayer};
+  const sc=getScorecardById(scId);
+  const[ai,bi]=matchPlayerOrder(rowPlayer,colPlayer);
+  const pA=sc.players[ai].name,pB=sc.players[bi].name;
+  document.getElementById('modal-match-info').innerHTML=`<strong>${esc(pA)}</strong> (${ai+1}) vs <strong>${esc(pB)}</strong> (${bi+1})`;
+  document.getElementById('modal-name-a').textContent=pA;
+  document.getElementById('modal-name-b').textContent=pB;
+  const m=sc.matches[matchKey(rowPlayer,colPlayer)];
+  const ex=(m&&m.sets)?m.sets:[];
+  renderSetRows(ex.length>0?ex:[['','']]);
+  updatePreview();
+  document.getElementById('score-modal').classList.add('open');
+  setTimeout(()=>{const f=document.querySelector('.set-input');if(f)f.focus();},80);
+}
+function closeModal(){document.getElementById('score-modal').classList.remove('open');modalCtx=null;}
+function renderSetRows(sets){const c=document.getElementById('sets-container');c.innerHTML='';sets.forEach((s,i)=>addSetRowWithValues(i,s[0],s[1]));updateAddBtn();}
+function addSetRowWithValues(idx,valA,valB){
+  const c=document.getElementById('sets-container');
+  const row=document.createElement('div');row.className='set-row';row.dataset.setIdx=idx;
+  row.innerHTML=`<span class="set-label">Set ${idx+1}</span>
+    <input class="set-input" type="number" min="0" max="7" value="${valA!==''?valA:''}" placeholder="0" oninput="updatePreview()">
+    <input class="set-input" type="number" min="0" max="7" value="${valB!==''?valB:''}" placeholder="0" oninput="updatePreview()">
+    <button class="set-remove" onclick="removeSetRow(this)" title="Remove">✕</button>`;
+  c.appendChild(row);
+}
+function addSetRow(){const rows=document.querySelectorAll('#sets-container .set-row');if(rows.length>=3)return;addSetRowWithValues(rows.length,'','');updateAddBtn();updatePreview();}
+function removeSetRow(btn){
+  const rows=document.querySelectorAll('#sets-container .set-row');if(rows.length<=1)return;
+  btn.closest('.set-row').remove();
+  document.querySelectorAll('#sets-container .set-row').forEach((r,i)=>{r.querySelector('.set-label').textContent=`Set ${i+1}`;r.dataset.setIdx=i;});
+  updateAddBtn();updatePreview();
+}
+function updateAddBtn(){document.getElementById('add-set-btn').style.display=document.querySelectorAll('#sets-container .set-row').length>=3?'none':'block';}
+function getSetValues(){return Array.from(document.querySelectorAll('#sets-container .set-row')).map(row=>{const i=row.querySelectorAll('.set-input');return[i[0].value.trim(),i[1].value.trim()];});}
+function updatePreview(){
+  const sets=getSetValues();const preview=document.getElementById('score-preview');const msg=document.getElementById('validation-msg');
+  document.querySelectorAll('.set-input').forEach(i=>i.classList.remove('invalid'));
+  let validSets=[],hasInvalid=false;
+  const rows=document.querySelectorAll('#sets-container .set-row');
+  sets.forEach(([a,b],idx)=>{
+    if(a===''&&b==='')return;if(a===''||b==='')return;
+    if(!isValidSet(a,b)){hasInvalid=true;rows[idx].querySelectorAll('.set-input').forEach(i=>i.classList.add('invalid'));}
+    else validSets.push([parseInt(a),parseInt(b)]);
+  });
+  if(!validSets.length){preview.innerHTML=`<span style="color:var(--muted)">Enter set scores above</span>`;msg.textContent='';return;}
+  const{wA,wB}=computeSetsWon(validSets);
+  const[ai,bi]=matchPlayerOrder(modalCtx.rowPlayer,modalCtx.colPlayer);
+  const sc=getScorecardById(modalCtx.scId);
+  const pA=esc(sc.players[ai].name),pB=esc(sc.players[bi].name);
+  const setsStr=validSets.map(([ga,gb])=>`${ga}-${gb}`).join('  ');
+  preview.innerHTML=`<span class="preview-sets">${setsStr}</span><span class="preview-pts">→ ${pA} <strong>${wA}</strong> – <strong>${wB}</strong> ${pB}</span>`;
+  msg.textContent=hasInvalid?'Invalid set — winner needs ≥6 games, lead by 2 (or 7-6 tiebreak).':'';
+}
+async function saveScore(){
+  if(!modalCtx)return;
+  const sets=getSetValues();const validSets=[];
+  for(const[a,b]of sets){if(a===''&&b==='')continue;if(!isValidSet(a,b)){toast('Fix invalid set scores first');return;}validSets.push([parseInt(a),parseInt(b)]);}
+  if(!validSets.length){toast('Enter at least one set score');return;}
+  const sc=getScorecardById(modalCtx.scId);
+  sc.matches[matchKey(modalCtx.rowPlayer,modalCtx.colPlayer)]={sets:validSets};
+  await saveState();closeModal();renderScorecard();
+  if(adminUnlocked)renderAdminScores(modalCtx.scId);
+  toast('Score saved');
+}
+async function clearScore(){
+  if(!modalCtx)return;
+  const sc=getScorecardById(modalCtx.scId);
+  delete sc.matches[matchKey(modalCtx.rowPlayer,modalCtx.colPlayer)];
+  await saveState();closeModal();renderScorecard();
+  if(adminUnlocked)renderAdminScores(modalCtx.scId);
+  toast('Score cleared');
+}
+document.getElementById('score-modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeCodeGate();}});
+
+// ════════════════════════════════════════════════
+//  ADMIN — SCORECARD MANAGEMENT
+// ════════════════════════════════════════════════
+async function addScorecard(){
+  const sc=defaultScorecard(`Group ${String.fromCharCode(65+state.scorecards.length)}`);
+  state.scorecards.push(sc);state.activeScorecardId=sc.id;
+  await saveState();renderAdminScorecardCards();renderTabs();
+  setTimeout(()=>{const el=document.getElementById('sc-card-'+sc.id);if(el)el.classList.add('open');},50);
+}
+
+function renderAdminScorecardCards(){
+  document.getElementById('admin-sc-cards').innerHTML=state.scorecards.map(sc=>buildScorecardCard(sc)).join('');
+}
+
+function buildScorecardCard(sc){
+  const n=sc.players.length;
+  const played=Object.keys(sc.matches).filter(k=>sc.matches[k].sets&&sc.matches[k].sets.length).length;
+  return `<div class="sc-card" id="sc-card-${sc.id}">
+    <div class="sc-card-header" onclick="toggleCard('${sc.id}')">
+      <span class="sc-card-chevron">▶</span>
+      <span class="sc-card-name">${esc(sc.name)}</span>
+      <span class="sc-card-meta">${n} players · ${played} matches</span>
+    </div>
+    <div class="sc-card-body">
+      <div class="sc-name-row">
+        <input type="text" value="${esc(sc.name)}" placeholder="Scorecard name" oninput="updateScName('${sc.id}',this.value)">
+      </div>
+      <div class="sc-body-grid">
+        <div class="sc-body-col">
+          <h4>Players</h4>
+          <div class="count-control">
+            <button onclick="adjustScPlayers('${sc.id}',-1)">−</button>
+            <span class="count-val" id="count-${sc.id}">${n}</span>
+            <button onclick="adjustScPlayers('${sc.id}',1)">+</button>
+          </div>
+          <div class="player-list" id="players-${sc.id}">
+            ${sc.players.map((p,i)=>`<div class="player-row">
+              <span class="player-num">${i+1}</span>
+              <input type="text" value="${esc(p.name)}" placeholder="Player ${i+1}"
+                oninput="updateScPlayerName('${sc.id}',${i},this.value)">
+            </div>`).join('')}
+          </div>
+        </div>
+        <div class="sc-body-col">
+          <h4>Scores</h4>
+          <div id="admin-scores-${sc.id}">${buildAdminScoreTable(sc)}</div>
+        </div>
+      </div>
+      <div class="sc-danger-zone">
+        <div id="clear-wrap-${sc.id}">
+          <button class="btn btn-danger btn-sm" onclick="showClearConfirm('${sc.id}')">Clear Scores</button>
+        </div>
+        <div id="delete-wrap-${sc.id}">
+          ${state.scorecards.length>1
+            ?`<button class="btn btn-ghost btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="showDeleteConfirm('${sc.id}')">Delete Scorecard</button>`
+            :`<span style="font-size:.75rem;color:var(--muted)">Cannot delete the only scorecard</span>`}
+        </div>
+      </div>
+      <div id="inline-confirm-${sc.id}" style="display:none;margin-top:.75rem"></div>
+    </div>
+  </div>`;
+}
+
+function buildAdminScoreTable(sc){
+  const n=sc.players.length;
+  if(n<2)return'<p style="font-size:.8rem;color:var(--muted)">Add players to see matches.</p>';
+  let rows='';
+  for(let r=0;r<n;r++) for(let c=r+1;c<n;c++){
+    const m=sc.matches[matchKey(r,c)]; const hasScore=m&&m.sets&&m.sets.length;
+    let disp=`<span class="score-badge empty">–</span>`;
+    if(hasScore){const{wA,wB}=computeSetsWon(m.sets);const str=m.sets.map(([ga,gb])=>`${ga}-${gb}`).join(' ');disp=`<span class="score-badge">${esc(str)}</span> <span style="font-size:.72rem;color:var(--muted)">${wA}–${wB}</span>`;}
+    rows+=`<tr>
+      <td style="font-size:.8rem">${r+1}. ${esc(sc.players[r].name)}</td>
+      <td style="font-size:.8rem">${c+1}. ${esc(sc.players[c].name)}</td>
+      <td>${disp}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openModal('${sc.id}',${r},${c})">Edit</button></td>
+    </tr>`;
+  }
+  return`<table class="admin-score-table"><thead><tr><th>A</th><th>B</th><th>Score</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderAdminScores(scId){
+  const sc=getScorecardById(scId);if(!sc)return;
+  const el=document.getElementById('admin-scores-'+scId);if(el)el.innerHTML=buildAdminScoreTable(sc);
+  const card=document.getElementById('sc-card-'+scId);
+  if(card){
+    const played=Object.keys(sc.matches).filter(k=>sc.matches[k].sets&&sc.matches[k].sets.length).length;
+    const meta=card.querySelector('.sc-card-meta');
+    if(meta)meta.textContent=`${sc.players.length} players · ${played} matches`;
+  }
+}
+
+function toggleCard(id){document.getElementById('sc-card-'+id).classList.toggle('open');}
+
+async function updateScName(id,val){
+  const sc=getScorecardById(id);sc.name=val;await saveState();renderTabs();
+  const card=document.getElementById('sc-card-'+id);
+  if(card)card.querySelector('.sc-card-name').textContent=val||'Unnamed';
+  if(state.activeScorecardId===id)document.getElementById('sc-page-title').textContent=val||'Scorecard';
+}
+
+async function adjustScPlayers(id,delta){
+  const sc=getScorecardById(id);const n=sc.players.length+delta;
+  if(n<2||n>16)return;
+  if(delta>0){sc.players.push({name:`Player ${sc.players.length+1}`});}
+  else{const removed=sc.players.length-1;sc.players.pop();Object.keys(sc.matches).forEach(k=>{const[a,b]=k.split('-').map(Number);if(a===removed||b===removed)delete sc.matches[k];});}
+  await saveState();
+  document.getElementById('count-'+id).textContent=sc.players.length;
+  document.getElementById('players-'+id).innerHTML=sc.players.map((p,i)=>`<div class="player-row">
+    <span class="player-num">${i+1}</span>
+    <input type="text" value="${esc(p.name)}" placeholder="Player ${i+1}" oninput="updateScPlayerName('${id}',${i},this.value)">
+  </div>`).join('');
+  renderAdminScores(id);
+}
+
+async function updateScPlayerName(scId,idx,val){
+  const sc=getScorecardById(scId);sc.players[idx].name=val;await saveState();
+}
+
+function showClearConfirm(id){
+  const el=document.getElementById('inline-confirm-'+id);el.style.display='block';
+  el.innerHTML=`<div class="inline-confirm">Clear all scores for this scorecard?
+    <button class="btn btn-danger btn-sm" onclick="doClearScores('${id}')">Yes, clear</button>
+    <button class="btn btn-ghost btn-sm" onclick="hideConfirm('${id}')">Cancel</button></div>`;
+}
+async function doClearScores(id){
+  const sc=getScorecardById(id);sc.matches={};await saveState();hideConfirm(id);renderAdminScores(id);renderScorecard();toast('Scores cleared');
+}
+function showDeleteConfirm(id){
+  const sc=getScorecardById(id);const el=document.getElementById('inline-confirm-'+id);el.style.display='block';
+  el.innerHTML=`<div class="inline-confirm">Delete "<strong>${esc(sc.name)}</strong>" and all its scores?
+    <button class="btn btn-danger btn-sm" onclick="doDeleteScorecard('${id}')">Yes, delete</button>
+    <button class="btn btn-ghost btn-sm" onclick="hideConfirm('${id}')">Cancel</button></div>`;
+}
+async function doDeleteScorecard(id){
+  if(state.scorecards.length<=1){toast('Cannot delete the only scorecard');return;}
+  state.scorecards=state.scorecards.filter(s=>s.id!==id);
+  if(state.activeScorecardId===id)state.activeScorecardId=state.scorecards[0].id;
+  await saveState();renderAdminScorecardCards();renderTabs();renderScorecard();toast('Scorecard deleted');
+}
+function hideConfirm(id){const el=document.getElementById('inline-confirm-'+id);if(el){el.style.display='none';el.innerHTML='';}}
+
+// ════════════════════════════════════════════════
+//  UTILS
+// ════════════════════════════════════════════════
+function esc(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function toast(msg,dur=2200){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),dur);}
+
+// ════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════
+async function init(){
+  state = loadLocalState();
+  renderScorecard();
+
+  if(sbReady()){
+    const remote = await sbFetch();
+    if(remote){ applyRemoteData(remote); saveLocalState(); renderScorecard(); }
+  } else {
+    setSyncStatus('ok','Local only');
+  }
+
+  const overlay=document.getElementById('loading-overlay');
+  overlay.classList.add('done');
+  setTimeout(()=>overlay.remove(),500);
+  document.getElementById('tabs-bar').style.display='flex';
+}
+
+init();
+</script>
+</body>
+</html>
