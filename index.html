@@ -282,6 +282,7 @@
               <button class="btn btn-primary btn-sm" onclick="setUserCode()">Set</button>
             </div>
             <div id="user-code-status" style="font-size:.75rem;margin-top:.35rem;color:var(--muted)"></div>
+            <button class="btn btn-ghost btn-sm" id="copy-user-code-btn" onclick="copyUserCode()" style="margin-top:.5rem;display:none">Copy user code to clipboard</button>
           </div>
           <div class="code-set-col">
             <div class="code-label">Admin code <span class="role-badge role-admin">Full access</span></div>
@@ -369,9 +370,9 @@ function applyAuthFromState(s) {
   if(s && s.authHashes) { authHashes = s.authHashes; saveAuthHashes(); }
 }
 
-// Access levels stored in sessionStorage (cleared on tab close)
-function getAccessLevel() { return sessionStorage.getItem('tennis_access') || 'none'; }
-function setAccessLevel(level) { sessionStorage.setItem('tennis_access', level); }
+// Access level persisted in localStorage so users don't re-enter code on return
+function getAccessLevel() { return localStorage.getItem('tennis_access') || 'none'; }
+function setAccessLevel(level) { localStorage.setItem('tennis_access', level); }
 function canEnterScores() { return ['user','admin'].includes(getAccessLevel()); }
 
 // ════════════════════════════════════════════════
@@ -651,6 +652,19 @@ function closeCodeGate(){
   pendingModalArgs = null;
 }
 
+async function autoVerifyStoredCode(){
+  if(canEnterScores()) return; // already authenticated this session
+  const stored = localStorage.getItem('tennis_verified_code');
+  if(!stored) return;
+  const hash = await sha256(stored);
+  if(hash === authHashes.userHash || hash === authHashes.adminHash){
+    setAccessLevel(hash === authHashes.adminHash ? 'admin' : 'user');
+  } else {
+    // Code no longer valid (user code was changed) — clear it
+    localStorage.removeItem('tennis_verified_code');
+  }
+}
+
 async function checkUserCode(){
   const val = document.getElementById('user-code-input').value.trim();
   if(!val){ document.getElementById('code-gate-error').textContent='Please paste your access code.'; return; }
@@ -661,6 +675,7 @@ async function checkUserCode(){
     if(pendingModalArgs){ const {scId,r,c}=pendingModalArgs; pendingModalArgs=null; openModal(scId,r,c); }
   } else if(hash === authHashes.userHash){
     setAccessLevel('user');
+    localStorage.setItem('tennis_verified_code', val); // remember for future visits
     document.getElementById('code-gate').classList.remove('open');
     if(pendingModalArgs){ const {scId,r,c}=pendingModalArgs; pendingModalArgs=null; openModal(scId,r,c); }
   } else {
@@ -712,10 +727,25 @@ function renderAdmin(){
 function updateCodeStatuses() {
   const uEl = document.getElementById('user-code-status');
   const aEl = document.getElementById('admin-code-status');
+  const copyBtn = document.getElementById('copy-user-code-btn');
   if(uEl) uEl.textContent = authHashes.userHash ? '✓ User code is set' : '⚠ No user code set yet';
   if(uEl) uEl.style.color = authHashes.userHash ? 'var(--court)' : 'var(--danger)';
   if(aEl) aEl.textContent = authHashes.adminHash ? '✓ Admin code is set' : '⚠ No admin code set yet';
   if(aEl) aEl.style.color = authHashes.adminHash ? 'var(--court)' : 'var(--danger)';
+  // Only show copy button if we have the plaintext stored
+  const plain = localStorage.getItem('tennis_user_code_plain');
+  if(copyBtn) copyBtn.style.display = (authHashes.userHash && plain) ? 'inline-block' : 'none';
+}
+
+function copyUserCode() {
+  const plain = localStorage.getItem('tennis_user_code_plain');
+  if(!plain){ toast('No user code available to copy — set one first'); return; }
+  navigator.clipboard.writeText(plain)
+    .then(() => toast('User code copied to clipboard'))
+    .catch(() => {
+      // Fallback for browsers that block clipboard
+      prompt('Copy this user code:', plain);
+    });
 }
 
 async function setUserCode() {
@@ -724,6 +754,8 @@ async function setUserCode() {
   if(val.length < 8){ toast('Code must be at least 8 characters'); return; }
   authHashes.userHash = await sha256(val);
   saveAuthHashes();
+  localStorage.setItem('tennis_user_code_plain', val); // admin can copy it
+  localStorage.removeItem('tennis_verified_code'); // force re-verify for existing users
   await saveState();
   document.getElementById('new-user-code').value = '';
   updateCodeStatuses();
@@ -976,10 +1008,12 @@ async function init(){
   loadAuthHashes();
   state = loadLocalState();
   renderScorecard();
+  // Auto-verify a previously accepted code so returning users don't need to re-enter
+  await autoVerifyStoredCode();
 
   if(sbReady()){
     const remote = await sbFetch();
-    if(remote){ applyRemoteData(remote); saveLocalState(); renderScorecard(); }
+    if(remote){ applyRemoteData(remote); saveLocalState(); renderScorecard(); await autoVerifyStoredCode(); }
   } else {
     setSyncStatus('ok','Local only');
   }
