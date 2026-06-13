@@ -15,22 +15,29 @@
   body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--dark);min-height:100vh;}
 
   /* HEADER */
-  header{background:var(--court);color:var(--line);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:60px;border-bottom:3px solid var(--accent);flex-shrink:0;}
-  .logo{font-weight:700;font-size:1.05rem;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:.5rem;white-space:nowrap;}
+  header{background:var(--court);color:var(--line);padding:0 1rem;display:flex;align-items:center;justify-content:space-between;height:60px;border-bottom:3px solid var(--accent);flex-shrink:0;min-width:0;overflow:hidden;}
+  .logo{font-weight:700;font-size:1.05rem;letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:.5rem;white-space:nowrap;overflow:hidden;min-width:0;flex-shrink:1;}
+  .logo-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .logo-ball{width:22px;height:22px;background:var(--accent);border-radius:50%;display:inline-flex;align-items:center;justify-content:center;position:relative;overflow:hidden;flex-shrink:0;}
   .logo-ball::after{content:'';position:absolute;width:30px;height:8px;border:2.5px solid var(--court);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-35deg);}
-  .header-right{display:flex;align-items:center;gap:.5rem;}
-  .sync-status{font-size:.72rem;padding:.25rem .6rem;border-radius:4px;font-weight:600;letter-spacing:.04em;display:flex;align-items:center;gap:.35rem;}
+  .header-right{display:flex;align-items:center;gap:.4rem;flex-shrink:0;}
+  .sync-status{font-size:.72rem;padding:.25rem .5rem;border-radius:4px;font-weight:600;letter-spacing:.04em;display:flex;align-items:center;gap:.3rem;flex-shrink:0;}
   .sync-status.ok{background:rgba(200,180,0,.2);color:var(--accent);}
   .sync-status.err{background:rgba(176,58,46,.2);color:#E8A09A;}
   .sync-status.syncing{background:rgba(255,255,255,.1);color:rgba(245,240,232,.6);}
   .sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
+  .sync-label{white-space:nowrap;}
   @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
   .sync-status.syncing .sync-dot{animation:pulse 1s infinite;}
-  .header-nav{display:flex;gap:.25rem;}
-  .nav-btn{background:transparent;border:1.5px solid transparent;color:rgba(245,240,232,.65);font-family:'DM Sans',sans-serif;font-size:.8rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:.35rem .85rem;border-radius:4px;cursor:pointer;transition:all .15s;}
+  .header-nav{display:flex;gap:.15rem;flex-shrink:0;}
+  .nav-btn{background:transparent;border:1.5px solid transparent;color:rgba(245,240,232,.65);font-family:'DM Sans',sans-serif;font-size:.78rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;padding:.3rem .65rem;border-radius:4px;cursor:pointer;transition:all .15s;white-space:nowrap;}
   .nav-btn:hover{color:var(--line);border-color:rgba(245,240,232,.3);}
   .nav-btn.active{background:rgba(200,180,0,.18);border-color:var(--accent);color:var(--accent);}
+  @media(max-width:480px){
+    .logo-text{display:none;}
+    .sync-label{display:none;}
+    .sync-status{padding:.25rem .35rem;}
+  }
 
   /* TABS */
   .tabs-bar{background:var(--court-mid);padding:0 1.5rem;display:flex;align-items:flex-end;gap:0;overflow-x:auto;border-bottom:2px solid rgba(0,0,0,.2);}
@@ -213,10 +220,10 @@
 </div>
 
 <header>
-  <div class="logo"><span class="logo-ball"></span>Round-Robin Tennis</div>
+  <div class="logo"><span class="logo-ball"></span><span class="logo-text">Round-Robin Tennis</span></div>
   <div class="header-right">
     <div class="sync-status syncing" id="sync-status">
-      <span class="sync-dot"></span><span id="sync-label">Loading…</span>
+      <span class="sync-dot"></span><span class="sync-label" id="sync-label">Loading…</span>
     </div>
     <div class="header-nav">
       <button class="nav-btn active" id="btn-scorecard" onclick="showMainView('scorecard',this)">Scorecard</button>
