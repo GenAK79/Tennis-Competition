@@ -31,9 +31,31 @@ Then go to **Project Settings → API** and copy your:
 ### 2. Hosting (GitHub Pages)
 
 1. Create a new GitHub repository
-1. Upload `index.html` (rename from `tennis-competition.html`) to the root of the repo
+1. Upload the following files to the root of the repo:
+- `tennis-competition.html` → rename to `index.html`
+- `config.json`
+- `setup.sql` (reference only — not served to users)
 1. Go to **Settings → Pages**, set the source to your main branch, and save
 1. Your app will be live at `https://yourusername.github.io/your-repo-name`
+
+### Configuration file
+
+Database credentials are stored in `config.json` in the repo root:
+
+```json
+{
+  "supabase_url": "https://your-project.supabase.co",
+  "supabase_anon_key": "eyJ..."
+}
+```
+
+To point the app at a different Supabase database, just update this file — no changes to `index.html` needed. The HTML file contains hardcoded fallback credentials, so the app still works even if `config.json` is missing.
+
+**Credential priority (highest to lowest):**
+
+1. Manual override set via the Admin panel (stored in browser localStorage)
+1. `config.json` in the repo root
+1. Hardcoded fallback in `index.html`
 
 -----
 

@@ -379,7 +379,7 @@ function canEnterScores() { return ['user','admin'].includes(getAccessLevel()); 
 //  SUPABASE
 // ════════════════════════════════════════════════
 const SB_CONFIG_KEY = 'tennis_sb_config';
-// Built-in connection — works automatically for all users
+// Fallback credentials — used only if config.json is not found
 const SB_DEFAULTS = {
   url: 'https://vkssrjsdbpwpehmfphao.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrc3NyanNkYnB3cGVobWZwaGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMDQ2NDYsImV4cCI6MjA5Njg4MDY0Nn0.BwqQqhbzHXIwDzb3dPWMDthqNaEdG57fqev2NvwpFX4'
@@ -389,6 +389,23 @@ try {
   const stored = JSON.parse(localStorage.getItem(SB_CONFIG_KEY) || '{}');
   sbConfig = (stored.url && stored.key) ? stored : SB_DEFAULTS;
 } catch(e) { sbConfig = SB_DEFAULTS; }
+
+async function loadConfigFile() {
+  // Try to load config.json from the same directory as the app
+  try {
+    const res = await fetch('./config.json', { cache: 'no-cache' });
+    if (!res.ok) return; // no config.json present — use defaults
+    const cfg = await res.json();
+    if (cfg.supabase_url && cfg.supabase_anon_key) {
+      // Config file takes priority over hardcoded defaults,
+      // but manual admin overrides in localStorage still win
+      const stored = JSON.parse(localStorage.getItem(SB_CONFIG_KEY) || '{}');
+      if (!stored.url || !stored.key) {
+        sbConfig = { url: cfg.supabase_url, key: cfg.supabase_anon_key };
+      }
+    }
+  } catch(e) { /* no config.json — silently use defaults */ }
+}
 
 function sbHeaders() {
   return { 'Content-Type':'application/json', 'apikey':sbConfig.key, 'Authorization':`Bearer ${sbConfig.key}` };
@@ -484,10 +501,13 @@ function populateSbFields() {
   document.getElementById('sb-key').value = sbConfig.key||'';
   if(sbReady()) {
     const isDefault = sbConfig.url === SB_DEFAULTS.url;
+    const isStored  = !!JSON.parse(localStorage.getItem(SB_CONFIG_KEY)||'{}').url;
     document.getElementById('sb-status').className='sb-status ok';
-    document.getElementById('sb-status').textContent = isDefault
-      ? '✓ Connected (built-in connection)'
-      : '✓ Connected (custom configuration)';
+    document.getElementById('sb-status').textContent = isStored
+      ? '✓ Connected (manually configured)'
+      : isDefault
+        ? '✓ Connected (config.json or built-in)'
+        : '✓ Connected';
   }
 }
 
@@ -1021,6 +1041,7 @@ function toast(msg,dur=2200){const el=document.getElementById('toast');el.textCo
 //  INIT
 // ════════════════════════════════════════════════
 async function init(){
+  await loadConfigFile();
   loadAuthHashes();
   state = loadLocalState();
   renderScorecard();
