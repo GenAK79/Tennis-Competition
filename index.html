@@ -379,8 +379,16 @@ function canEnterScores() { return ['user','admin'].includes(getAccessLevel()); 
 //  SUPABASE
 // ════════════════════════════════════════════════
 const SB_CONFIG_KEY = 'tennis_sb_config';
+// Built-in connection — works automatically for all users
+const SB_DEFAULTS = {
+  url: 'https://vkssrjsdbpwpehmfphao.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZrc3NyanNkYnB3cGVobWZwaGFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzMDQ2NDYsImV4cCI6MjA5Njg4MDY0Nn0.BwqQqhbzHXIwDzb3dPWMDthqNaEdG57fqev2NvwpFX4'
+};
 let sbConfig = {};
-try { sbConfig = JSON.parse(localStorage.getItem(SB_CONFIG_KEY)) || {}; } catch(e){}
+try {
+  const stored = JSON.parse(localStorage.getItem(SB_CONFIG_KEY) || '{}');
+  sbConfig = (stored.url && stored.key) ? stored : SB_DEFAULTS;
+} catch(e) { sbConfig = SB_DEFAULTS; }
 
 function sbHeaders() {
   return { 'Content-Type':'application/json', 'apikey':sbConfig.key, 'Authorization':`Bearer ${sbConfig.key}` };
@@ -475,8 +483,11 @@ function populateSbFields() {
   document.getElementById('sb-url').value = sbConfig.url||'';
   document.getElementById('sb-key').value = sbConfig.key||'';
   if(sbReady()) {
+    const isDefault = sbConfig.url === SB_DEFAULTS.url;
     document.getElementById('sb-status').className='sb-status ok';
-    document.getElementById('sb-status').textContent='✓ Configured';
+    document.getElementById('sb-status').textContent = isDefault
+      ? '✓ Connected (built-in connection)'
+      : '✓ Connected (custom configuration)';
   }
 }
 
