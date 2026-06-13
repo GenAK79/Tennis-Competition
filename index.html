@@ -183,15 +183,13 @@
   .sb-status.err{background:#FFF5F4;color:var(--danger);}
   .sb-status.info{background:var(--bg);color:var(--muted);}
 
-  /* Access code display */
-  .code-display{background:var(--bg);border:1.5px solid var(--border);border-radius:6px;padding:.75rem 1rem;font-family:'DM Mono',monospace;font-size:.78rem;word-break:break-all;color:var(--dark);letter-spacing:.04em;line-height:1.6;position:relative;}
-  .copy-btn{position:absolute;top:.5rem;right:.5rem;background:var(--court);color:var(--line);border:none;border-radius:4px;padding:.2rem .55rem;font-size:.7rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;}
-  .copy-btn:hover{background:var(--court-mid);}
-  .code-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.4rem;margin-top:.85rem;}
-  .code-label:first-child{margin-top:0;}
+  /* Access code UI */
+  .code-set-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+  .code-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
   .role-badge{display:inline-block;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:.15rem .45rem;border-radius:3px;margin-left:.4rem;vertical-align:middle;}
   .role-user{background:#E8F4FD;color:#1A6B9A;}
   .role-admin{background:rgba(200,180,0,.2);color:#6B5900;}
+  @media(max-width:540px){.code-set-grid{grid-template-columns:1fr;}}
 
   /* Admin gate */
   .admin-gate{max-width:380px;margin:3rem auto;background:var(--surface);border-radius:10px;padding:2rem;text-align:center;border:1px solid var(--border);border-top:4px solid var(--court);}
@@ -247,7 +245,7 @@
   <div id="view-admin" class="view">
     <div id="admin-gate" class="admin-gate">
       <h2>Admin Access</h2>
-      <p>Paste your admin access code to continue</p>
+      <p id="admin-gate-desc">Paste your admin access code to continue</p>
       <textarea id="admin-code-input" placeholder="Paste access code here…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();checkAdminCode();}"></textarea>
       <button class="btn btn-primary" style="width:100%" onclick="checkAdminCode()">Unlock</button>
       <div class="admin-gate-error" id="admin-gate-error"></div>
@@ -275,17 +273,26 @@
       <!-- Access codes -->
       <div class="admin-section">
         <h3>Access Codes</h3>
-        <p style="font-size:.82rem;color:var(--muted);margin-bottom:.75rem;">Share these codes with the appropriate people. The user code allows score entry. The admin code unlocks this panel.</p>
-        <div class="code-label">User code <span class="role-badge role-user">Score entry</span></div>
-        <div class="code-display" id="display-user-code">
-          <button class="copy-btn" onclick="copyCode('user')">Copy</button>
-          <span id="user-code-text"></span>
+        <p style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;">Set the codes users will need to enter scores (user code) and access this admin panel (admin code). Codes are stored as hashes — they are never saved in plain text anywhere.</p>
+        <div class="code-set-grid">
+          <div class="code-set-col">
+            <div class="code-label">User code <span class="role-badge role-user">Score entry</span></div>
+            <div style="display:flex;gap:.5rem;margin-top:.4rem">
+              <input type="password" id="new-user-code" placeholder="Enter new user code" style="flex:1;padding:.45rem .75rem;border:1.5px solid var(--border);border-radius:5px;font-family:'DM Mono',monospace;font-size:.82rem;outline:none;">
+              <button class="btn btn-primary btn-sm" onclick="setUserCode()">Set</button>
+            </div>
+            <div id="user-code-status" style="font-size:.75rem;margin-top:.35rem;color:var(--muted)"></div>
+          </div>
+          <div class="code-set-col">
+            <div class="code-label">Admin code <span class="role-badge role-admin">Full access</span></div>
+            <div style="display:flex;gap:.5rem;margin-top:.4rem">
+              <input type="password" id="new-admin-code" placeholder="Enter new admin code" style="flex:1;padding:.45rem .75rem;border:1.5px solid var(--border);border-radius:5px;font-family:'DM Mono',monospace;font-size:.82rem;outline:none;">
+              <button class="btn btn-primary btn-sm" onclick="setAdminCode()">Set</button>
+            </div>
+            <div id="admin-code-status" style="font-size:.75rem;margin-top:.35rem;color:var(--muted)"></div>
+          </div>
         </div>
-        <div class="code-label" style="margin-top:.85rem">Admin code <span class="role-badge role-admin">Full access</span></div>
-        <div class="code-display" id="display-admin-code">
-          <button class="copy-btn" onclick="copyCode('admin')">Copy</button>
-          <span id="admin-code-text"></span>
-        </div>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:.85rem;font-style:italic">Changing the admin code will require you to use the new code next time you log in.</p>
       </div>
 
       <!-- Scorecards -->
@@ -342,24 +349,27 @@
 
 <script>
 // ════════════════════════════════════════════════
-//  ACCESS CODES  (hashed — originals never stored in JS)
+//  ACCESS CODES  — hashes stored in Supabase, set via admin panel
 // ════════════════════════════════════════════════
-// SHA-256 of the plaintext codes
-const ADMIN_CODE_HASH = 'b7e3a924f6d1c058e2b94a7f3d2e8c16b0a5f9e4d7c2b1a8e6f0d3c9b5a2e7f1';
-const USER_CODE_HASH  = 'a4f2e9b6d0c8a1e7f3b5d9c2e6a8f0b4d1c7e3a9f5b2d8c0e4a6f1b3d7c9e2a5';
-
-// Plaintext codes shown in admin panel (loaded from config, never hardcoded here)
-// We store them in Supabase config row so admin can see them after setup
-const ADMIN_CODE_PLAIN = 'K9#mP2$vL8@nQ5&wR3!xT6*yU4^zA7%b';
-const USER_CODE_PLAIN  = 'Hj7$cF4@eN2#gM9!kB6^pW3&qD8*rX5%';
+// Hashes loaded from remote state; fall back to localStorage cache
+let authHashes = { adminHash: '', userHash: '' };
 
 async function sha256(str) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 }
 
+function loadAuthHashes() {
+  try { const c = JSON.parse(localStorage.getItem('tennis_auth_hashes')||'{}'); authHashes = { adminHash: c.adminHash||'', userHash: c.userHash||'' }; } catch(e){}
+}
+function saveAuthHashes() {
+  localStorage.setItem('tennis_auth_hashes', JSON.stringify(authHashes));
+}
+function applyAuthFromState(s) {
+  if(s && s.authHashes) { authHashes = s.authHashes; saveAuthHashes(); }
+}
+
 // Access levels stored in sessionStorage (cleared on tab close)
-// 'none' | 'user' | 'admin'
 function getAccessLevel() { return sessionStorage.getItem('tennis_access') || 'none'; }
 function setAccessLevel(level) { sessionStorage.setItem('tennis_access', level); }
 function canEnterScores() { return ['user','admin'].includes(getAccessLevel()); }
@@ -482,8 +492,7 @@ let modalCtx = null;
 let pendingModalArgs = null; // store args while waiting for code gate
 
 function getStateForStorage() {
-  // strip any runtime-only keys
-  return { activeScorecardId:state.activeScorecardId, scorecards:state.scorecards };
+  return { activeScorecardId:state.activeScorecardId, scorecards:state.scorecards, authHashes:authHashes };
 }
 
 function applyRemoteData(data) {
@@ -491,6 +500,7 @@ function applyRemoteData(data) {
   state.activeScorecardId = data.activeScorecardId || state.activeScorecardId;
   state.scorecards = data.scorecards || state.scorecards;
   if(!state.activeScorecardId) state.activeScorecardId = state.scorecards[0].id;
+  applyAuthFromState(data);
 }
 
 function loadLocalState() {
@@ -548,7 +558,16 @@ function showMainView(name,btn){
   if(btn)btn.classList.add('active');
   document.getElementById('tabs-bar').style.display=name==='scorecard'?'flex':'none';
   if(name==='scorecard')renderScorecard();
-  if(name==='admin')renderAdmin();
+  if(name==='admin'){
+    // If no admin code has been set yet, skip the gate
+    if(!authHashes.adminHash){
+      adminUnlocked=true;
+      setAccessLevel('admin');
+      document.getElementById('admin-gate').style.display='none';
+      document.getElementById('admin-content').style.display='block';
+    }
+    renderAdmin();
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -636,16 +655,14 @@ async function checkUserCode(){
   const val = document.getElementById('user-code-input').value.trim();
   if(!val){ document.getElementById('code-gate-error').textContent='Please paste your access code.'; return; }
   const hash = await sha256(val);
-  if(hash === USER_CODE_HASH || hash === ADMIN_CODE_HASH){
-    // admin code also grants user-level access
-    const level = hash === ADMIN_CODE_HASH ? 'admin' : 'user';
-    setAccessLevel(level);
+  if(hash === authHashes.adminHash){
+    setAccessLevel('admin');
     document.getElementById('code-gate').classList.remove('open');
-    if(pendingModalArgs){
-      const {scId,r,c} = pendingModalArgs;
-      pendingModalArgs = null;
-      openModal(scId, r, c);
-    }
+    if(pendingModalArgs){ const {scId,r,c}=pendingModalArgs; pendingModalArgs=null; openModal(scId,r,c); }
+  } else if(hash === authHashes.userHash){
+    setAccessLevel('user');
+    document.getElementById('code-gate').classList.remove('open');
+    if(pendingModalArgs){ const {scId,r,c}=pendingModalArgs; pendingModalArgs=null; openModal(scId,r,c); }
   } else {
     document.getElementById('code-gate-error').textContent='Incorrect code. Please try again.';
   }
@@ -660,7 +677,14 @@ async function checkAdminCode(){
   const val = document.getElementById('admin-code-input').value.trim();
   if(!val){ document.getElementById('admin-gate-error').textContent='Please paste your admin code.'; return; }
   const hash = await sha256(val);
-  if(hash === ADMIN_CODE_HASH){
+  // If no admin hash set yet, the first code entered becomes the admin code
+  if(!authHashes.adminHash){
+    authHashes.adminHash = hash;
+    saveAuthHashes();
+    await saveState();
+    toast('Admin code set for the first time.');
+  }
+  if(hash === authHashes.adminHash){
     adminUnlocked = true;
     setAccessLevel('admin');
     document.getElementById('admin-gate').style.display='none';
@@ -674,25 +698,48 @@ async function checkAdminCode(){
 
 function lockAdmin(){
   adminUnlocked = false;
-  document.getElementById('admin-gate').style.display='block';
-  document.getElementById('admin-content').style.display='none';
-  document.getElementById('admin-code-input').value='';
-  document.getElementById('admin-gate-error').textContent='';
+  setAccessLevel('none');
   showMainView('scorecard',document.getElementById('btn-scorecard'));
 }
 
 function renderAdmin(){
   if(!adminUnlocked) return;
   populateSbFields();
-  // show codes
-  document.getElementById('user-code-text').textContent = USER_CODE_PLAIN;
-  document.getElementById('admin-code-text').textContent = ADMIN_CODE_PLAIN;
+  updateCodeStatuses();
   renderAdminScorecardCards();
 }
 
-function copyCode(type){
-  const text = type==='user' ? USER_CODE_PLAIN : ADMIN_CODE_PLAIN;
-  navigator.clipboard.writeText(text).then(()=>toast(type==='user'?'User code copied':'Admin code copied'));
+function updateCodeStatuses() {
+  const uEl = document.getElementById('user-code-status');
+  const aEl = document.getElementById('admin-code-status');
+  if(uEl) uEl.textContent = authHashes.userHash ? '✓ User code is set' : '⚠ No user code set yet';
+  if(uEl) uEl.style.color = authHashes.userHash ? 'var(--court)' : 'var(--danger)';
+  if(aEl) aEl.textContent = authHashes.adminHash ? '✓ Admin code is set' : '⚠ No admin code set yet';
+  if(aEl) aEl.style.color = authHashes.adminHash ? 'var(--court)' : 'var(--danger)';
+}
+
+async function setUserCode() {
+  const val = document.getElementById('new-user-code').value.trim();
+  if(!val){ toast('Enter a user code first'); return; }
+  if(val.length < 8){ toast('Code must be at least 8 characters'); return; }
+  authHashes.userHash = await sha256(val);
+  saveAuthHashes();
+  await saveState();
+  document.getElementById('new-user-code').value = '';
+  updateCodeStatuses();
+  toast('User code updated');
+}
+
+async function setAdminCode() {
+  const val = document.getElementById('new-admin-code').value.trim();
+  if(!val){ toast('Enter an admin code first'); return; }
+  if(val.length < 8){ toast('Code must be at least 8 characters'); return; }
+  authHashes.adminHash = await sha256(val);
+  saveAuthHashes();
+  await saveState();
+  document.getElementById('new-admin-code').value = '';
+  updateCodeStatuses();
+  toast('Admin code updated — use this code next time you log in');
 }
 
 // ════════════════════════════════════════════════
@@ -926,6 +973,7 @@ function toast(msg,dur=2200){const el=document.getElementById('toast');el.textCo
 //  INIT
 // ════════════════════════════════════════════════
 async function init(){
+  loadAuthHashes();
   state = loadLocalState();
   renderScorecard();
 
