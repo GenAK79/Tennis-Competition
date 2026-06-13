@@ -560,10 +560,9 @@ function showMainView(name,btn){
   document.getElementById('tabs-bar').style.display=name==='scorecard'?'flex':'none';
   if(name==='scorecard')renderScorecard();
   if(name==='admin'){
-    // If no admin code has been set yet, skip the gate
-    if(!authHashes.adminHash){
+    // Skip gate if no code set yet, or already authenticated
+    if(!authHashes.adminHash || getAccessLevel()==='admin'){
       adminUnlocked=true;
-      setAccessLevel('admin');
       document.getElementById('admin-gate').style.display='none';
       document.getElementById('admin-content').style.display='block';
     }
@@ -702,6 +701,7 @@ async function checkAdminCode(){
   if(hash === authHashes.adminHash){
     adminUnlocked = true;
     setAccessLevel('admin');
+    localStorage.setItem('tennis_verified_code', val);
     document.getElementById('admin-gate').style.display='none';
     document.getElementById('admin-content').style.display='block';
     renderAdmin();
@@ -714,6 +714,11 @@ async function checkAdminCode(){
 function lockAdmin(){
   adminUnlocked = false;
   setAccessLevel('none');
+  localStorage.removeItem('tennis_verified_code');
+  document.getElementById('admin-gate').style.display='block';
+  document.getElementById('admin-content').style.display='none';
+  document.getElementById('admin-code-input').value='';
+  document.getElementById('admin-gate-error').textContent='';
   showMainView('scorecard',document.getElementById('btn-scorecard'));
 }
 
